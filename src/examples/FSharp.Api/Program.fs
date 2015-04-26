@@ -9,6 +9,8 @@ open System
 
 [<EntryPoint>]
 let main _ =
+    //Greeter.main()
+    //MapReduce.main()
     Supervisioning.main()
     Console.ReadLine() |> ignore
     0

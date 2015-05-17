@@ -77,8 +77,10 @@
   </Target>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.fs" />
+    <Compile Include="Prelude.fs" />
     <Compile Include="Actors.fs" />
     <Compile Include="Serialization.fs" />
+    <Compile Include="Logging.fs" />
     <Compile Include="FaultHandling.fs" />
     <Compile Include="Spawning.fs" />
     <Compile Include="Schedulers.fs" />

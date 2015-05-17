@@ -8,6 +8,7 @@
 module Akka.FSharp.Tests.ApiTests
 
 open Akka.FSharp
+open Akka.FSharp.Supervision
 open Akka.Actor
 open System
 open Xunit

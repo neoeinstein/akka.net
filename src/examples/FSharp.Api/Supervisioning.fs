@@ -11,6 +11,7 @@ open System
 open Akka.Actor
 open Akka.Configuration
 open Akka.FSharp
+open Akka.FSharp.Supervision
 
 type CustomException() =
     inherit Exception()
@@ -57,10 +58,10 @@ let main() =
             // define supervision strategy
             <| [ SpawnOption.SupervisorStrategy (
                     // restart on Custom Exception, default behavior on all other exception types
-                    Strategy.OneForOne(fun e ->
-                    match e with
-                    | :? CustomException -> Directive.Restart 
-                    | _ -> SupervisorStrategy.DefaultDecider(e)))  ]
+                    OneForOne.create' <| fun e ->
+                        match e with
+                        | :? CustomException -> Directive.Restart 
+                        | _ -> SupervisorStrategy.DefaultDecider(e))  ]
                         
     async {
         let! response = parent <? Echo "hello world"

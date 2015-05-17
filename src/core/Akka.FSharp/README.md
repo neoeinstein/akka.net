@@ -147,27 +147,29 @@ Monitored actors will automatically send a `Terminated` message to their watcher
 
 ### Actor supervisor strategies
 
-Actors have a place in their system's hierarchy trees. To manage failures done by the child actors, their parents/supervisors may decide to use specific supervisor strategies (see: [Supervision](http://akkadotnet.github.io/wiki/Supervision)) in order to react to the specific types of errors. In F# this may be configured using functions of the `Strategy` module:
+Actors have a place in their system's hierarchy trees. To manage failures done by the child actors, their parents/supervisors may decide to use specific supervisor strategies (see: [Supervision](http://akkadotnet.github.io/wiki/Supervision)) in order to react to the specific types of errors. In F# this may be configured using functions of the `Supervision` module:
 
--   `Strategy.OneForOne (decider : exn -> Directive) : SupervisorStrategy` - returns a supervisor strategy applicable only to child actor which faulted during execution.
--   `Strategy.OneForOne (decider : exn -> Directive, ?retries : int, ?timeout : TimeSpan) : SupervisorStrategy` - returns a supervisor strategy applicable only to child actor which faulted during execution. [retries] param defines a number of times, an actor could be restarted. If it's a negative value, there is not limit. [timeout] param defines a time window for number of retries to occur.
--   `OneForOne (decider : Expr<(exn -> Directive)>, ?retries : int, ?timeout : TimeSpan)  : SupervisorStrategy` - returns a supervisor strategy applicable only to child actor which faulted during execution. [retries] param defines a number of times, an actor could be restarted. If it's a negative value, there is not limit. [timeout] param defines a time window for number of retries to occur. **Strategies created this way may be serialized and deserialized on remote nodes** .
--   `Strategy.AllForOne (decider : exn -> Directive) : SupervisorStrategy` - returns a supervisor strategy applicable to each supervised actor when any of them had faulted during execution.
--   `Strategy.AllForOne (decider : exn -> Directive, ?retries : int, ?timeout : TimeSpan) : SupervisorStrategy` -  returns a supervisor strategy applicable to each supervised actor when any of them had faulted during execution. [retries] param defines a number of times, an actor could be restarted. If it's a negative value, there is not limit. [timeout] param defines a time window for number of retries to occur.
--   `AllForOne (decider : Expr<(exn -> Directive)>, ?retries : int, ?timeout : TimeSpan) : SupervisorStrategy` - returns a supervisor strategy applicable to each supervised actor when any of them had faulted during execution. [retries] param defines a number of times, an actor could be restarted. If it's a negative value, there is not limit. [timeout] param defines a time window for number of retries to occur. **Strategies created this way may be serialized and deserialized on remote nodes** .
+-   `OneForOne.create (decider : exn -> Directive) : SupervisorStrategy` - returns a supervisor strategy applicable only to child actor which faulted during execution.
+-   `OneForOne.create' (decider : exn -> Directive) (retries : Retry) (timeout : Timeout) : SupervisorStrategy` - returns a supervisor strategy applicable only to child actor which faulted during execution. [retries] param defines a number of times, an actor could be restarted. `Unlimited` indicates, there is no limit. [timeout] param defines a time window for number of retries to occur.
+-   `OneForOne.ofExpr (decider : Expr<(exn -> Directive)>) : SupervisorStrategy` - returns a supervisor strategy applicable only to child actor which faulted during execution. **Strategies created this way may be serialized and deserialized on remote nodes** .
+-   `OneForOne.ofExpr' (decider : Expr<(exn -> Directive)>) (retries : Retry) (timeout : Timeout) : SupervisorStrategy` - returns a supervisor strategy applicable only to child actor which faulted during execution. [retries] param defines a number of times, an actor could be restarted. `Unlimited` indicates, there is no limit. [timeout] param defines a time window for number of retries to occur. **Strategies created this way may be serialized and deserialized on remote nodes** .
+-   `AllForOne.create (decider : exn -> Directive) : SupervisorStrategy` - returns a supervisor strategy applicable to each supervised actor when any of them had faulted during execution.
+-   `AllForOne.create' (decider : exn -> Directive) (retries : Retry) (timeout : Timeout) : SupervisorStrategy` -  returns a supervisor strategy applicable to each supervised actor when any of them had faulted during execution. [retries] param defines a number of times, an actor could be restarted. `Unlimited` indicates, there is no limit. [timeout] param defines a time window for number of retries to occur.
+-   `AllForOne.ofExpr (decider : Expr<(exn -> Directive)>) : SupervisorStrategy` - returns a supervisor strategy applicable to each supervised actor when any of them had faulted during execution. **Strategies created this way may be serialized and deserialized on remote nodes** .
+-   `AllForOne.ofExpr' (decider : Expr<(exn -> Directive)>) (retries : Retry) (timeout : Timeout) : SupervisorStrategy` - returns a supervisor strategy applicable to each supervised actor when any of them had faulted during execution. [retries] param defines a number of times, an actor could be restarted. `Unlimited` indicates, there is no limit. [timeout] param defines a time window for number of retries to occur. **Strategies created this way may be serialized and deserialized on remote nodes** .
 
 Example:
 
     let aref = 
         spawnOpt system "my-actor" (actorOf myFunc) 
-            [ SpawnOption.SupervisorStrategy (Strategy.OneForOne (fun error -> 
+            [ SpawnOption.SupervisorStrategy (OneForOne.create <| fun error -> 
                 match error with
                 | :? ArithmeticException -> Directive.Escalate
-                | _ -> SupervisorStrategy.DefaultDecider error )) ]
+                | _ -> SupervisorStrategy.DefaultDecider error ) ]
     
     let remoteRef = 
         spawne system "remote-actor" <@ actorOf myFunc @>
-            [ SpawnOption.SupervisorStrategy (Strategy.OneForOne <@ fun error -> 
+            [ SpawnOption.SupervisorStrategy (OneForOne.ofExpr <@ fun error -> 
                 match error with
                 | :? ArithmeticException -> Directive.Escalate
                 | _ -> SupervisorStrategy.DefaultDecider error ) @>

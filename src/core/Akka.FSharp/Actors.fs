@@ -11,12 +11,6 @@ open System
 open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Linq.QuotationEvaluation
 
-module internal OptionHelper = 
-    let optToNullable = 
-        function 
-        | Some x -> Nullable x
-        | None -> Nullable()
-
 [<AutoOpen>]
 module Actors = 
     open Akka.Util
@@ -64,7 +58,7 @@ module Actors =
             
             member __.Tell(message : 'Message, sender : IActorRef) = underlyingRef.Tell(message :> obj, sender)
             member __.Ask(message : 'Message, timeout : TimeSpan option) : Async<'Response> = 
-                Async.AwaitTask(underlyingRef.Ask<'Response>(message, OptionHelper.optToNullable timeout))
+                Async.AwaitTask(underlyingRef.Ask<'Response>(message, Option.toNullable timeout))
             member __.Path = underlyingRef.Path
             
             member __.Equals other = 
@@ -147,7 +141,7 @@ module Actors =
         interface CanTell<'Message> with
             member __.Tell(message : 'Message, sender : IActorRef) : unit = selection.Tell(message, sender)
             member __.Ask(message : 'Message, timeout : TimeSpan option) : Async<'Response> = 
-                Async.AwaitTask(selection.Ask<'Response>(message, OptionHelper.optToNullable timeout))    
+                Async.AwaitTask(selection.Ask<'Response>(message, Option.toNullable timeout))    
     
     /// <summary>
     /// Unidirectional send operator. 

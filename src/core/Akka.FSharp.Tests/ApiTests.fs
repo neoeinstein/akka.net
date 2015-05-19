@@ -7,10 +7,10 @@
 
 module Akka.FSharp.Tests.ApiTests
 
+open System
 open Akka.FSharp
 open Akka.FSharp.Supervision
 open Akka.Actor
-open System
 open Xunit
 
 
@@ -64,7 +64,7 @@ let ``can serialize nested discriminated unions`` () =
 [<Fact>]
 let ``can serialize typed actor ref`` () =
     use sys = System.create "system" (Configuration.defaultConfig())
-    let echo = spawn sys "echo" <| actorOf2 (fun mailbox msg -> mailbox.Sender() <! msg)
+    let echo = Spawn.create sys "echo" <| Actor.ofFunction' (fun mailbox msg -> mailbox.Sender() <! msg)
 
     let serializer = sys.Serialization.FindSerializerFor echo
     let bytes = serializer.ToBinary echo

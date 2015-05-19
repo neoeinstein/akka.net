@@ -7,7 +7,7 @@
 namespace Akka.FSharp
 
 open Akka.Actor
-open System
+open global.System
 
 [<AutoOpen>]
 module Inbox = 

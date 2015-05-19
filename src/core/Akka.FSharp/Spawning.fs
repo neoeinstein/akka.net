@@ -22,6 +22,7 @@ module Configuration =
     /// Loads Akka configuration from the project's .config file.
     let load = Akka.Configuration.ConfigurationFactory.Load
 
+[<RequireQualifiedAccess>]
 module System = 
     /// Creates an actor system with remote deployment serialization enabled.
     let create (name : string) (config : Akka.Configuration.Config) : ActorSystem = 
@@ -29,7 +30,7 @@ module System =
         Serialization.exprSerializationSupport system
         system
 
-[<AutoOpen>]
+[<RequireQualifiedAccess>]
 module Spawn = 
     type SpawnOption = 
         | Deploy of Deploy
@@ -38,7 +39,7 @@ module Spawn =
         | Dispatcher of string
         | Mailbox of string
     
-    let rec applySpawnOptions (props : Props) (opt : SpawnOption list) : Props = 
+    let rec internal applySpawnOptions (opt : SpawnOption list) (props : Props) : Props = 
         match opt with
         | [] -> props
         | h :: t -> 
@@ -49,8 +50,19 @@ module Spawn =
                 | SupervisorStrategy s -> props.WithSupervisorStrategy s
                 | Dispatcher d -> props.WithDispatcher d
                 | Mailbox m -> props.WithMailbox m
-            applySpawnOptions p t
+            applySpawnOptions t p
     
+    let fromProps (actorFactory : IActorRefFactory) name props =
+        actorFactory.ActorOf(props, name)
+        |> typed
+        :> ActorRef<'Message>
+
+    let createFromQuotation actorFactory options name =
+        LinqExpression.ofQuotation
+        >> Props.Create
+        >> applySpawnOptions options
+        >> fromProps actorFactory name
+
     /// <summary>
     /// Spawns an actor using specified actor computation expression, using an Expression AST.
     /// The actor code can be deployed remotely.
@@ -59,11 +71,8 @@ module Spawn =
     /// <param name="name">Name of spawned child actor</param>
     /// <param name="expr">F# expression compiled down to receive function used by actor for response for incoming request</param>
     /// <param name="options">List of options used to configure actor creation</param>
-    let spawne (actorFactory : IActorRefFactory) (name : string) 
-        (expr : Expr<Actor<'Message> -> Cont<'Message, 'Returned>>) (options : SpawnOption list) : ActorRef<'Message> = 
-        let e = Linq.Expression.ToExpression(fun () -> new FunActor<'Message, 'Returned>(expr))
-        let props = applySpawnOptions (Props.Create e) options
-        typed (actorFactory.ActorOf(props, name)) :> ActorRef<'Message>
+    let fromActorExpr actorFactory options name (actorExpr : Expr<Actor<'Message> -> Cont<'Message, 'Returned>>) : ActorRef<'Message> = 
+        createFromQuotation actorFactory options name <@ fun () -> FunActor(%actorExpr) @>
     
     /// <summary>
     /// Spawns an actor using specified actor computation expression, with custom spawn option settings.
@@ -71,23 +80,20 @@ module Spawn =
     /// </summary>
     /// <param name="actorFactory">Either actor system or parent actor</param>
     /// <param name="name">Name of spawned child actor</param>
-    /// <param name="f">Used by actor for handling response for incoming request</param>
+    /// <param name="actor">Used by actor for handling response for incoming request</param>
     /// <param name="options">List of options used to configure actor creation</param>
-    let spawnOpt (actorFactory : IActorRefFactory) (name : string) (f : Actor<'Message> -> Cont<'Message, 'Returned>) 
-        (options : SpawnOption list) : ActorRef<'Message> = 
-        let e = Linq.Expression.ToExpression(fun () -> new FunActor<'Message, 'Returned>(f))
-        let props = applySpawnOptions (Props.Create e) options
-        typed (actorFactory.ActorOf(props, name)) :> ActorRef<'Message>
-    
+    let create' actorFactory options name (actor : Actor<'Message> -> Cont<'Message, 'Returned>) : ActorRef<'Message> =
+        createFromQuotation actorFactory options name <@ fun () -> FunActor(actor) @>
+            
     /// <summary>
     /// Spawns an actor using specified actor computation expression.
     /// The actor can only be used locally. 
     /// </summary>
     /// <param name="actorFactory">Either actor system or parent actor</param>
     /// <param name="name">Name of spawned child actor</param>
-    /// <param name="f">Used by actor for handling response for incoming request</param>
-    let spawn (actorFactory : IActorRefFactory) (name : string) (f : Actor<'Message> -> Cont<'Message, 'Returned>) : ActorRef<'Message> = 
-        spawnOpt actorFactory name f []
+    /// <param name="actor">Used by actor for handling response for incoming request</param>
+    let create actorFactory name actor : ActorRef<'Message> =
+        create' actorFactory [] name actor
     
     /// <summary>
     /// Spawns an actor using specified actor quotation, with custom spawn option settings.
@@ -97,11 +103,8 @@ module Spawn =
     /// <param name="name">Name of spawned child actor</param>
     /// <param name="f">Used to create a new instance of the actor</param>
     /// <param name="options">List of options used to configure actor creation</param>
-    let spawnObjOpt (actorFactory : IActorRefFactory) (name : string) (f : Quotations.Expr<unit -> #ActorBase>) 
-        (options : SpawnOption list) : ActorRef<'Message> = 
-        let e = Linq.Expression.ToExpression<'Actor> f
-        let props = applySpawnOptions (Props.Create e) options
-        typed (actorFactory.ActorOf(props, name)) :> ActorRef<'Message>
+    let fromObjectExpr' actorFactory options name (f : Quotations.Expr<unit -> #ActorBase>) : ActorRef<'Message> =
+        createFromQuotation actorFactory options name f
     
     /// <summary>
     /// Spawns an actor using specified actor quotation.
@@ -110,31 +113,33 @@ module Spawn =
     /// <param name="actorFactory">Either actor system or parent actor</param>
     /// <param name="name">Name of spawned child actor</param>
     /// <param name="f">Used to create a new instance of the actor</param>
-    let spawnObj (actorFactory : IActorRefFactory) (name : string) (f : Quotations.Expr<unit -> #ActorBase>) : ActorRef<'Message> = 
-        spawnObjOpt actorFactory name f []
+    let fromObjectExpr actorFactory name (f : Quotations.Expr<unit -> #ActorBase>) : ActorRef<'Message> = 
+        fromObjectExpr' actorFactory [] name f
+    
+[<RequireQualifiedAccess>]
+module Actor = 
+    /// <summary>
+    /// Wraps provided function with actor behavior. 
+    /// It will be invoked each time, an actor will receive a message. 
+    /// </summary>
+    let ofFunction (f : 'Message -> unit) : Actor<'Message> -> Cont<'Message, 'Returned> =
+        fun mbx ->
+            let rec loop() = actor { 
+                let! msg = mbx.Receive()
+                f msg
+                return! loop()
+            }
+            loop()
     
     /// <summary>
     /// Wraps provided function with actor behavior. 
     /// It will be invoked each time, an actor will receive a message. 
     /// </summary>
-    let actorOf (fn : 'Message -> unit) (mailbox : Actor<'Message>) : Cont<'Message, 'Returned> = 
-        let rec loop() = 
-            actor { 
-                let! msg = mailbox.Receive()
-                fn msg
+    let ofFunction' (f : Actor<'Message> -> 'Message -> unit) : Actor<'Message> -> Cont<'Message, 'Returned> =
+        fun mbx ->
+            let rec loop() = actor { 
+                let! msg = mbx.Receive()
+                f mbx msg
                 return! loop()
             }
-        loop()
-    
-    /// <summary>
-    /// Wraps provided function with actor behavior. 
-    /// It will be invoked each time, an actor will receive a message. 
-    /// </summary>
-    let actorOf2 (fn : Actor<'Message> -> 'Message -> unit) (mailbox : Actor<'Message>) : Cont<'Message, 'Returned> = 
-        let rec loop() = 
-            actor { 
-                let! msg = mailbox.Receive()
-                fn mailbox msg
-                return! loop()
-            }
-        loop()
+            loop()

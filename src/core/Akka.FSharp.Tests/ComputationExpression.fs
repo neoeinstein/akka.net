@@ -7,8 +7,8 @@
 
 module Akka.FSharp.Tests.ComputationExpression
 
-open Akka.FSharp
 open System
+open Akka.FSharp
 open Xunit
 
 let send m =

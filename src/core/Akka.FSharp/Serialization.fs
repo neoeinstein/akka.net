@@ -11,43 +11,41 @@ open System
 open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Linq.QuotationEvaluation
 
-module Linq = 
+module internal LinqExpression = 
     open System.Linq.Expressions
     open Microsoft.FSharp.Linq
     
-    let (|Lambda|_|) (e : Expression) = 
-        match e with
+    let inline internal (|Lambda|_|) (expr : Expression) = 
+        match expr with
         | :? LambdaExpression as l -> Some(l.Parameters, l.Body)
         | _ -> None
     
-    let (|Call|_|) (e : Expression) = 
+    let inline internal (|Call|_|) (e : Expression) = 
         match e with
         | :? MethodCallExpression as c -> Some(c.Object, c.Method, c.Arguments)
         | _ -> None
     
-    let (|Method|) (e : System.Reflection.MethodInfo) = e.Name
+    let inline internal (|Method|) (e : System.Reflection.MethodInfo) = e.Name
     
-    let (|Invoke|_|) = 
-        function 
+    let inline internal (|Invoke|_|) e = 
+        match e with
         | Call(o, Method("Invoke"), _) -> Some o
         | _ -> None
     
-    let (|Ar|) (p : System.Collections.ObjectModel.ReadOnlyCollection<Expression>) = Array.ofSeq p
+    let inline internal (|Ar|) (p : System.Collections.ObjectModel.ReadOnlyCollection<Expression>) = Array.ofSeq p
     
-    let toExpression<'Actor> (f : System.Linq.Expressions.Expression) = 
-        match f with
-        | Lambda(_, Invoke(Call(null, Method "ToFSharpFunc", Ar [| Lambda(_, p) |]))) | Call(null, Method "ToFSharpFunc", 
-                                                                                             Ar [| Lambda(_, p) |]) -> 
+    let inline internal toExpression<'Actor> expr = 
+        match expr with
+        | Lambda(_, Invoke(Call(null, Method "ToFSharpFunc", Ar [| Lambda(_, p) |])))
+        | Call(null, Method "ToFSharpFunc", Ar [| Lambda(_, p) |]) -> 
             Expression.Lambda(p, [||]) :?> System.Linq.Expressions.Expression<System.Func<'Actor>>
         | _ -> failwith "Doesn't match"
-    
-    type Expression = 
-        static member ToExpression(f : System.Linq.Expressions.Expression<System.Func<FunActor<'Message, 'v>>>) = 
-            toExpression<FunActor<'Message, 'v>> f
-        static member ToExpression<'Actor>(f : Quotations.Expr<unit -> 'Actor>) = 
-            toExpression<'Actor> (QuotationEvaluator.ToLinqExpression f)
 
-module Serialization = 
+    let ofQuotation<'Actor> =
+        QuotationEvaluator.ToLinqExpression
+        >> toExpression<'Actor>
+
+module internal Serialization = 
     open Nessos.FsPickler
     open Akka.Serialization
     
@@ -61,7 +59,7 @@ module Serialization =
         fsp.Deserialize(t, stream)
     
     // used for top level serialization
-    type ExprSerializer(system) = 
+    type internal ExprSerializer(system) = 
         inherit Serializer(system)
         let fsp = FsPickler.CreateBinary()
         override __.Identifier = 9
